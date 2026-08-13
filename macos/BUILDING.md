@@ -102,10 +102,12 @@ build scripts. It is machine- and boot-specific.
 
 ## Build procedure
 
-When shared Zig code has changed, first update the underlying Ghostty library:
+When shared Zig code has changed, first update the underlying Ghostty library.
+Use `ReleaseFast` for a ReleaseLocal application; otherwise Xcode will link the
+default Debug library and the application will display a debug-build warning:
 
 ```sh
-zig build -Demit-macos-app=false
+zig build -Doptimize=ReleaseFast -Demit-macos-app=false
 ```
 
 Then build the application through the repository's macOS wrapper:
