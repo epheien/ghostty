@@ -1,4 +1,5 @@
 @testable import Ghostty
+import AppKit
 import Testing
 
 struct SurfaceViewAppKitTests {
@@ -38,6 +39,54 @@ struct SurfaceViewAppKitTests {
             Ghostty.SurfaceView.shouldSuppressComposingControlInput(
                 nil,
                 composing: true
+            ) == false
+        )
+    }
+
+    @Test(arguments: [
+        NSEvent.ModifierFlags.control,
+        NSEvent.ModifierFlags.command,
+        NSEvent.ModifierFlags([.control, .shift]),
+        NSEvent.ModifierFlags([.command, .shift]),
+    ])
+    func bypassesInputMethodForNonTextShortcutModifiers(
+        modifiers: NSEvent.ModifierFlags
+    ) {
+        #expect(
+            Ghostty.SurfaceView.shouldBypassInputMethod(
+                eventModifiers: modifiers,
+                translationModifiers: modifiers,
+                hasMarkedText: false
+            )
+        )
+    }
+
+    @Test func bypassesInputMethodForOptionTranslatedToAlt() {
+        #expect(
+            Ghostty.SurfaceView.shouldBypassInputMethod(
+                eventModifiers: .option,
+                translationModifiers: [],
+                hasMarkedText: false
+            )
+        )
+    }
+
+    @Test func preservesInputMethodForTextProducingOption() {
+        #expect(
+            Ghostty.SurfaceView.shouldBypassInputMethod(
+                eventModifiers: .option,
+                translationModifiers: .option,
+                hasMarkedText: false
+            ) == false
+        )
+    }
+
+    @Test func preservesInputMethodWhileComposing() {
+        #expect(
+            Ghostty.SurfaceView.shouldBypassInputMethod(
+                eventModifiers: [.control, .option, .command],
+                translationModifiers: [.control, .option, .command],
+                hasMarkedText: true
             ) == false
         )
     }

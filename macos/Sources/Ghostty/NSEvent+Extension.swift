@@ -38,13 +38,40 @@ extension NSEvent {
         // behavior with ctrl pressed and we don't want any of that.
         key_ev.unshifted_codepoint = 0
         if type == .keyDown || type == .keyUp {
-            if let chars = characters(byApplyingModifiers: []),
-               let codepoint = chars.unicodeScalars.first {
-                key_ev.unshifted_codepoint = codepoint.value
-            }
+            let translated = characters(byApplyingModifiers: [])
+            let translationFlags = translationMods ?? modifierFlags
+            let optionIsAlt = modifierFlags.contains(.option) &&
+                !translationFlags.contains(.option)
+            let isShortcut = !modifierFlags.isDisjoint(with: [.control, .command]) ||
+                optionIsAlt
+            key_ev.unshifted_codepoint = Self.ghosttyUnshiftedCodepoint(
+                translated: translated,
+                shortcutFallback: isShortcut ? charactersIgnoringModifiers : nil
+            )
         }
 
         return key_ev
+    }
+
+    /// Extract a single unshifted codepoint, falling back to AppKit's
+    /// modifier-ignoring characters for shortcuts when input methods don't
+    /// support `characters(byApplyingModifiers:)` on older macOS versions.
+    static func ghosttyUnshiftedCodepoint(
+        translated: String?,
+        shortcutFallback: String?
+    ) -> UInt32 {
+        for chars in [translated, shortcutFallback] {
+            guard let chars else { continue }
+            let scalars = chars.unicodeScalars
+            guard let scalar = scalars.first,
+                  scalars.index(after: scalars.startIndex) == scalars.endIndex else {
+                continue
+            }
+
+            return scalar.value
+        }
+
+        return 0
     }
 
     /// Returns the text to set for a key event for Ghostty.

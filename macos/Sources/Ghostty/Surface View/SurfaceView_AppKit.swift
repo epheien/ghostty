@@ -1152,6 +1152,27 @@ extension Ghostty {
 
             let action = event.isARepeat ? GHOSTTY_ACTION_REPEAT : GHOSTTY_ACTION_PRESS
 
+            // Shortcut modifiers that don't contribute to text should bypass the
+            // input method when there is no active preedit. Some input methods,
+            // notably Chinese IMEs, otherwise consume control and alt shortcuts
+            // before Ghostty can encode them for the terminal.
+            //
+            // We must continue through interpretKeyEvents while composing so the
+            // input method can handle shortcuts that edit or commit its preedit.
+            if Ghostty.SurfaceView.shouldBypassInputMethod(
+                eventModifiers: event.modifierFlags,
+                translationModifiers: translationEvent.modifierFlags,
+                hasMarkedText: hasMarkedText()
+            ) {
+                _ = keyAction(
+                    action,
+                    event: event,
+                    translationEvent: translationEvent,
+                    text: translationEvent.ghosttyCharacters
+                )
+                return
+            }
+
             // By setting this to non-nil, we note that we're in a keyDown event. From here,
             // we call interpretKeyEvents so that we can handle complex input such as Korean
             // language.
@@ -2159,6 +2180,24 @@ extension Ghostty.SurfaceView: NSTextInputClient {
             return false
         }
         return scalar.value < 0x20
+    }
+
+    /// Returns true when a key should go directly to Ghostty instead of through
+    /// AppKit's text input system. Control and command don't produce text, and an
+    /// option modifier removed by key translation is configured as terminal Alt.
+    static func shouldBypassInputMethod(
+        eventModifiers: NSEvent.ModifierFlags,
+        translationModifiers: NSEvent.ModifierFlags,
+        hasMarkedText: Bool
+    ) -> Bool {
+        guard !hasMarkedText else { return false }
+
+        if !eventModifiers.isDisjoint(with: [.control, .command]) {
+            return true
+        }
+
+        return eventModifiers.contains(.option) &&
+            !translationModifiers.contains(.option)
     }
 }
 
