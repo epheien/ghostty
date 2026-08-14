@@ -116,6 +116,11 @@ Then build the application through the repository's macOS wrapper:
 macos/build.nu --configuration ReleaseLocal
 ```
 
+The wrapper explicitly disables Xcode code coverage for non-test actions.
+Without this override, a scheme-level coverage setting can instrument even a
+ReleaseLocal binary and cause the distributed application to create
+`default.profraw` files at runtime.
+
 Do not use `zig build` as the final macOS application build. The wrapper invokes
 the Xcode project with a clean environment and places products in the expected
 directory.
@@ -163,6 +168,10 @@ plutil -extract LSMinimumSystemVersion raw "$APP/Contents/Info.plist"
 lipo -archs "$APP/Contents/MacOS/ghostty"
 vtool -show-build "$APP/Contents/MacOS/ghostty"
 codesign --verify --deep --strict --verbose=2 "$APP"
+
+# A distributable binary must not contain LLVM coverage instrumentation.
+! nm -a "$APP/Contents/MacOS/ghostty" 2>/dev/null | grep -q __llvm_profile_runtime
+! otool -l "$APP/Contents/MacOS/ghostty" | grep -q __llvm_prf_
 ```
 
 Expected key results are:

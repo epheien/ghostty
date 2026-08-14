@@ -19,6 +19,15 @@ def main [
         []
     }
 
+    # Xcode may retain code coverage as a scheme-level setting. Never
+    # instrument distributable builds because the profiling runtime writes
+    # default.profraw into the process working directory.
+    let build_settings = if $action == "test" {
+        []
+    } else {
+        ["ENABLE_CODE_COVERAGE=NO"]
+    }
+
     (^env -i
         $"HOME=($env.HOME)"
         "PATH=/usr/bin:/bin:/usr/sbin:/sbin"
@@ -28,5 +37,6 @@ def main [
         -configuration $configuration
         $"SYMROOT=($build_dir)"
         ...$skip_testing
+        ...$build_settings
         $action)
 }
