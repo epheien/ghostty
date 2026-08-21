@@ -39,6 +39,7 @@ pub const Uniforms = extern struct {
     cursor_text: [4]f32 align(16),
     selection_background_color: [4]f32 align(16),
     selection_foreground_color: [4]f32 align(16),
+    time_since_cursor_change: f32 align(4),
 };
 
 /// The target to load shaders for.
@@ -422,6 +423,27 @@ test "shadertoy to glsl" {
     defer alloc.free(glsl);
 
     // log.warn("glsl={s}", .{glsl});
+}
+
+test "shadertoy cursor elapsed time feature macro" {
+    const testing = std.testing;
+    const alloc = testing.allocator;
+
+    const src = try testGlslZ(alloc,
+        \\void mainImage(out vec4 fragColor, in vec2 fragCoord) {
+        \\#ifdef GHOSTTY_HAS_TIME_SINCE_CURSOR_CHANGE
+        \\    float elapsed = iTimeSinceCursorChange;
+        \\#else
+        \\    float elapsed = max(iTime - iTimeCursorChange, 0.0);
+        \\#endif
+        \\    fragColor = vec4(elapsed, fragCoord.x, fragCoord.y, 1.0);
+        \\}
+    );
+    defer alloc.free(src);
+
+    var buf: [4096 * 4]u8 = undefined;
+    var writer: std.Io.Writer = .fixed(&buf);
+    try spirvFromGlsl(&writer, null, src);
 }
 
 const test_crt = @embedFile("shaders/test_shadertoy_crt.glsl");

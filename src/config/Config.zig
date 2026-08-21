@@ -3095,6 +3095,22 @@ keybind: Keybinds = .{},
 ///    the same time as the `iTime` uniform, allowing you to compute the
 ///    time since the change by subtracting this from `iTime`.
 ///
+///  * `float iTimeSinceCursorChange` - Time in seconds since the terminal
+///    cursor last changed position or color.
+///
+///    Prefer this over `iTime - iTimeCursorChange` for animations. This
+///    relative value retains smooth sub-frame precision even after the
+///    surface has been running for a long time. Shaders that also support
+///    older Ghostty versions can use the feature macro:
+///
+///    ```glsl
+///    #ifdef GHOSTTY_HAS_TIME_SINCE_CURSOR_CHANGE
+///    float elapsed = iTimeSinceCursorChange;
+///    #else
+///    float elapsed = max(iTime - iTimeCursorChange, 0.0);
+///    #endif
+///    ```
+///
 ///  * `float iTimeFocus` - Timestamp when the surface last gained iFocus.
 ///
 ///    When the surface gains focus, this is set to the current value of

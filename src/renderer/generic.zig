@@ -33,6 +33,11 @@ const getConstraint = @import("../font/nerd_font_attributes.zig").getConstraint;
 
 const FileType = @import("../file_type.zig").FileType;
 
+fn customShaderDurationSeconds(duration: std.Io.Duration) f32 {
+    const nanoseconds: f32 = @floatFromInt(duration.nanoseconds);
+    return nanoseconds / std.time.ns_per_s;
+}
+
 const macos = switch (builtin.os.tag) {
     .macos => @import("macos"),
     else => void,
@@ -172,6 +177,12 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
         ///
         /// This is used when updating custom shader uniforms.
         last_frame_time: ?std.Io.Timestamp = null,
+
+        /// Timestamp when the terminal cursor most recently changed.
+        ///
+        /// This remains in the native timestamp domain so the elapsed time
+        /// can be calculated before converting to f32 for custom shaders.
+        cursor_change_time: ?std.Io.Timestamp = null,
 
         /// The font structures.
         font_grid: *font.SharedGrid,
@@ -768,6 +779,7 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
                     .cursor_text = @splat(0),
                     .selection_background_color = @splat(0),
                     .selection_foreground_color = @splat(0),
+                    .time_since_cursor_change = 0,
                 },
                 .bg_image_buffer = undefined,
 
@@ -2136,11 +2148,15 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
             };
             const last_frame_time = self.last_frame_time orelse now;
 
-            const since_ns: f32 = @floatFromInt(first_frame_time.durationTo(now).nanoseconds);
-            uniforms.time = since_ns / std.time.ns_per_s;
+            uniforms.time = customShaderDurationSeconds(first_frame_time.durationTo(now));
 
-            const delta_ns: f32 = @floatFromInt(last_frame_time.durationTo(now).nanoseconds);
-            uniforms.time_delta = delta_ns / std.time.ns_per_s;
+            uniforms.time_delta = customShaderDurationSeconds(last_frame_time.durationTo(now));
+
+            if (self.cursor_change_time) |changed_at| {
+                uniforms.time_since_cursor_change = customShaderDurationSeconds(
+                    changed_at.durationTo(now),
+                );
+            }
 
             uniforms.frame += 1;
 
@@ -2227,6 +2243,8 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
                     uniforms.current_cursor = new_cursor;
                     uniforms.current_cursor_color = cursor_color;
                     uniforms.cursor_change_time = uniforms.time;
+                    uniforms.time_since_cursor_change = 0;
+                    self.cursor_change_time = now;
                 }
             }
 
@@ -3376,4 +3394,17 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
             try texture.replaceRegion(0, 0, atlas.size, atlas.size, atlas.data);
         }
     };
+}
+
+test "shadertoy cursor elapsed time retains precision after long uptime" {
+    const testing = std.testing;
+    const uptime_ns = 262_144 * std.time.ns_per_s;
+    const frame_ns = 8 * std.time.ns_per_ms;
+
+    const old_time: f32 = @floatFromInt(uptime_ns);
+    const old_next: f32 = @floatFromInt(uptime_ns + frame_ns);
+    try testing.expectEqual(old_time, old_next);
+
+    const elapsed = customShaderDurationSeconds(.fromNanoseconds(frame_ns));
+    try testing.expectApproxEqAbs(@as(f32, 0.008), elapsed, 0.000_001);
 }

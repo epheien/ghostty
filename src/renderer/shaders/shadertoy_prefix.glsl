@@ -28,7 +28,14 @@ layout(binding = 1, std140) uniform Globals {
     uniform vec3  iCursorText;
     uniform vec3  iSelectionForegroundColor;
     uniform vec3  iSelectionBackgroundColor;
+    // The CPU represents every std140 vec3 as four floats. Without this
+    // explicit member, the following float occupies the final vec3's fourth
+    // slot and no longer matches the CPU uniform structure.
+    uniform float _ghosttyPaddingSelectionBackgroundColor;
+    uniform float iTimeSinceCursorChange;
 };
+
+#define GHOSTTY_HAS_TIME_SINCE_CURSOR_CHANGE 1
 
 #define CURSORSTYLE_BLOCK        0
 #define CURSORSTYLE_BLOCK_HOLLOW 1
