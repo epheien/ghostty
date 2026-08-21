@@ -21,6 +21,42 @@ recipient is prepared to approve an unnotarized application. It uses an ad-hoc
 "Sign to Run Locally" signature. It is not equivalent to a Developer ID signed
 and Apple-notarized public release.
 
+## Quick repeatable build
+
+After the prerequisites have been installed once, run the following commands
+from the repository root whenever a new distributable package is needed:
+
+```sh
+# 1. Rebuild the shared library for both macOS architectures in release mode.
+TOOLCHAINS=Metal \
+  zig build -Doptimize=ReleaseFast -Demit-macos-app=false
+
+# 2. Remove stale Xcode products, then build an ad-hoc-signed release app.
+macos/build.nu --configuration ReleaseLocal --action clean
+macos/build.nu --configuration ReleaseLocal
+
+# 3. Create a commit-specific transfer archive.
+REV=$(git rev-parse --short HEAD)
+ZIP="macos/build/Ghostty-${REV}-macOS13-universal.zip"
+ditto -c -k --sequesterRsrc --keepParent \
+  macos/build/ReleaseLocal/Ghostty.app "$ZIP"
+
+# 4. Check the archive and record its checksum.
+unzip -t "$ZIP"
+shasum -a 256 "$ZIP"
+```
+
+The application before compression is always available at:
+
+```text
+macos/build/ReleaseLocal/Ghostty.app
+```
+
+Do not omit the first step when shared Zig code under `src/` changed. Otherwise
+Xcode can link an older or Debug `GhosttyKit`, causing missing changes or the
+debug-build warning. The clean step prevents Xcode products from a previous
+configuration or coverage-enabled test build from being reused.
+
 ## Prerequisites
 
 - Full Xcode, not only Command Line Tools
@@ -42,7 +78,7 @@ xcode-select -p
 xcodebuild -version
 nu --version
 msgfmt --version
-xcrun --find metal
+TOOLCHAINS=Metal xcrun -sdk macosx metal --version
 ```
 
 `xcode-select -p` should point inside the full application, normally:
@@ -80,21 +116,21 @@ The second command should report `Status: installed`. Then run:
 
 ```sh
 sudo xcodebuild -runFirstLaunch
-xcrun metal --version
+TOOLCHAINS=Metal xcrun -sdk macosx metal --version
+TOOLCHAINS=Metal xcrun -sdk macosx --find metallib
 ```
 
-If the component is installed but `xcrun metal` still reports it missing, Xcode
-has probably failed to persist its toolchain mapping under
-`~/Library/Developer/Xcode`. Open Xcode once, allow it to install components,
-and retry outside any filesystem sandbox. A reboot may also be required after a
-MobileAsset Metal Toolchain is mounted.
+If the component is installed but plain `xcrun metal` still reports it missing,
+select the separate toolchain explicitly with `TOOLCHAINS=Metal` as shown
+above. This stable name lets Xcode resolve the current MobileAsset version and
+does not depend on a boot-specific mount path.
 
-For diagnosis, `xcodebuild -showComponent MetalToolchain` prints the toolchain
-identifier and search path. A command such as the following confirms whether
-the downloaded compiler itself is usable:
+For diagnosis, `xcodebuild -showComponent MetalToolchain` prints the installed
+component details. The following command shows the actual compiler selected by
+Xcode:
 
 ```sh
-xcrun --toolchain <toolchain-identifier> --find metal
+TOOLCHAINS=Metal xcrun -sdk macosx --find metal
 ```
 
 Do not commit a MobileAsset mount path from `/private/var/run/...` into the
@@ -107,12 +143,18 @@ Use `ReleaseFast` for a ReleaseLocal application; otherwise Xcode will link the
 default Debug library and the application will display a debug-build warning:
 
 ```sh
-zig build -Doptimize=ReleaseFast -Demit-macos-app=false
+TOOLCHAINS=Metal \
+  zig build -Doptimize=ReleaseFast -Demit-macos-app=false
 ```
+
+Xcode 26 distributes the Metal compiler as a separate toolchain. Selecting it
+by the stable `Metal` identifier lets `xcrun` resolve the current installed
+version without embedding a versioned MobileAsset mount path in the build.
 
 Then build the application through the repository's macOS wrapper:
 
 ```sh
+macos/build.nu --configuration ReleaseLocal --action clean
 macos/build.nu --configuration ReleaseLocal
 ```
 
